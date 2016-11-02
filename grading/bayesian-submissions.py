@@ -1,8 +1,11 @@
 import importlib
 import traceback
 from grading.util import roster, print_table
-from logic import FolKB
-from utils import expr
+# from logic import FolKB
+# from utils import expr
+import os
+from sklearn.naive_bayes import GaussianNB
+gnb = GaussianNB()
 
 def indent(howMuch = 1):
     space = ' '
@@ -30,58 +33,44 @@ def printResults(query, gen, limit=3):
         print(short, end=' ')
     print('...')
 
-def tryKB(label, base):
-    kbString = base['kb']
-    kb = FolKB([])
-    for kbLine in kbString.split('\n'):
-        s = kbLine.strip()
-        if len(s) == 0:
-            continue
-        if(s[0] == '#'):
-            continue
-        try:
-            sentence = expr(s)
-            kb.tell(sentence)
-        except:
-            traceback.print_exc()
-    printKB(label, kb)
-    print(indent(2), 'queries:')
-    queryString = base['queries']
-    for qLine in queryString.split('\n'):
-        s = qLine.strip()
-        if len(s) == 0:
-            continue
-        if(s[0] == '#'):
-            continue
-        try:
-            query = expr(s)
-            generator = kb.ask_generator(query)
-            print(indent(3), str(query) + '?', end=' ')
-            if 'limit' in base:
-                printResults(query, generator, base['limit'])
-            else:
-                printResults(query, generator)
-        except:
-            traceback.print_exc()
+def tryOne(label, frame):
+    fit = gnb.fit(frame.data, frame.target)
+    print('')
+    print_table(fit.theta_,
+                header=[frame.feature_names],
+                topLeft=['Means:'],
+                leftColumn=frame.target_names,
+                numfmt='%6.3f',
+                njust='center',
+                tjust='rjust',
+                )
+    y_pred = fit.predict(frame.data)
+    print("Number of mislabeled points out of a total %d points : %d"
+          % (len(frame.data), (frame.target != y_pred).sum()))
 
-def try_kbs(bases):
-    for label in bases:
-        tryKB(label, bases[label])
+def tryExamples(examples):
+    for label in examples:
+        tryOne(label, examples[label])
 
 submissions = {}
 scores = {}
 
 message1 = 'Submissions that compile:'
+
+root = os.getcwd()
 for student in roster:
     try:
+        os.chdir(root + '/submissions/' + student)
         # http://stackoverflow.com/a/17136796/2619926
-        mod = importlib.import_module('submissions.' + student + '.myLogic')
+        mod = importlib.import_module('submissions.' + student + '.myBayes')
         submissions[student] = mod.Examples
         message1 += ' ' + student
     except ImportError:
         pass
     except:
         traceback.print_exc()
+
+os.chdir(root)
 
 print(message1)
 print('----------------------------------------')
@@ -91,9 +80,9 @@ for student in roster:
         continue
     scores[student] = []
     try:
-        bases = submissions[student]
-        print('Knowledge Bases from:', student)
-        try_kbs(bases)
+        examples = submissions[student]
+        print('Bayesian Networks from:', student)
+        tryExamples(examples)
     except:
         traceback.print_exc()
 
